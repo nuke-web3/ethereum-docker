@@ -1,0 +1,124 @@
+networks:
+  devnet:
+    name: op-devnet
+
+services:
+  keygen:
+    image: protolambda/eth2-val-tools:latest
+    volumes:
+      - ./eth-devnet-genesis:/eth-devnet-genesis
+    entrypoint: ""
+    command:
+      - sh
+      - -c
+      - if [ -d /eth-devnet-genesis/keystore ]; then echo 'Keystore already exists, skipping generation'; exit 0; fi && ./eth2-val-tools keystores --source-mnemonic 'giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete' --out-loc /eth-devnet-genesis/keystore --source-min 0 --source-max 64 && chmod 0777 -R /eth-devnet-genesis/keystore/teku-keys
+
+  genesis:
+    image: ethpandaops/ethereum-genesis-generator:5.0.6
+    volumes:
+      - ./eth-devnet-genesis:/data
+      - ./values.env:/config/values.env
+    entrypoint: ""
+    command:
+      - sh
+      - -c
+      - if [ -d /data/metadata ]; then echo 'Metadata already exists, skipping generation'; exit 0; fi && ./entrypoint.sh all
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+
+  geth-init:
+    image: ethereum/client-go:latest
+    volumes:
+       - ./eth-devnet-genesis:/eth-devnet-genesis
+       - ./geth-data:/data/geth
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    command: >
+       init --datadir /data/geth /eth-devnet-genesis/metadata/genesis.json
+
+  geth:
+       image: ethereum/client-go:latest
+       ports:
+         - "8545:8545"
+         - "30303:30303"
+         - "8551:8551"
+       networks:
+         - devnet
+       volumes:
+         - ./eth-devnet-genesis:/eth-devnet-genesis
+         - ./geth-data:/data/geth
+       depends_on:
+         geth-init:
+           condition: service_completed_successfully
+       command: >
+        --datadir=/data/geth
+        --http
+        --http.addr=0.0.0.0
+        --http.port=8545
+        --http.vhosts=*
+        --http.corsdomain=*
+        --http.api=admin,engine,net,eth,web3,debug,txpool
+        --ws
+        --ws.addr=0.0.0.0
+        --ws.port=8546
+        --ws.api=admin,engine,net,eth,web3,debug,txpool
+        --ws.origins=*
+        --allow-insecure-unlock
+        --authrpc.port=8551
+        --authrpc.addr=0.0.0.0
+        --authrpc.vhosts=*
+        --authrpc.jwtsecret=/eth-devnet-genesis/jwt/jwtsecret
+        --syncmode=full
+        --rpc.allow-unprotected-txs
+        --metrics
+        --metrics.addr=0.0.0.0
+        --metrics.port=9001
+        --miner.gasprice=1
+        --discovery.port=30303
+        --port=30303
+        --verbosity=3
+
+  teku:
+      image: ethpandaops/teku:master
+      user: 1001:1001
+      ports:
+        - "4000:4000"
+        - "9000:9000/tcp"
+        - "9000:9000/udp"
+      networks:
+        - devnet
+      volumes:
+        - ./eth-devnet-genesis:/eth-devnet-genesis
+        - ./teku-data:/data/teku/teku-beacon-data
+      command: >
+        --logging=DEBUG
+        --log-destination=CONSOLE
+        --network=/eth-devnet-genesis/metadata/config.yaml
+        --data-path=/data/teku/teku-beacon-data
+        --data-storage-mode=ARCHIVE
+        --p2p-enabled=true
+        --p2p-peer-lower-bound=1
+        --p2p-advertised-ip=172.18.0.3
+        --p2p-discovery-site-local-addresses-enabled=true
+        --p2p-port=9000
+        --rest-api-enabled=true
+        --rest-api-docs-enabled=true
+        --rest-api-interface=0.0.0.0
+        --rest-api-port=4000
+        --rest-api-host-allowlist=*
+        --data-storage-non-canonical-blocks-enabled=true
+        --ee-jwt-secret-file=/eth-devnet-genesis/jwt/jwtsecret
+        --ee-endpoint=http://geth:8551
+        --metrics-enabled
+        --metrics-interface=0.0.0.0
+        --metrics-host-allowlist=*
+        --metrics-categories=BEACON,PROCESS,LIBP2P,JVM,NETWORK,PROCESS
+        --metrics-port=8008
+        --ignore-weak-subjectivity-period-enabled=true
+        --genesis-state=/eth-devnet-genesis/metadata/genesis.ssz
+        --validator-keys=/eth-devnet-genesis/keystore/teku-keys:/eth-devnet-genesis/keystore/teku-secrets
+        --validators-proposer-default-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
+      depends_on:
+        - geth
