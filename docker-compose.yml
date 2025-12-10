@@ -2,11 +2,16 @@ networks:
   devnet:
     name: op-devnet
 
+volumes:
+  eth-devnet-genesis:
+  geth-data:
+  teku-data:
+
 services:
   keygen:
     image: protolambda/eth2-val-tools:latest
     volumes:
-      - ./eth-devnet-genesis:/eth-devnet-genesis
+      - eth-devnet-genesis:/eth-devnet-genesis
     entrypoint: ""
     command:
       - sh
@@ -22,10 +27,11 @@ services:
           --source-min 0 \
           --source-max 64 &&
         chmod 0777 -R /eth-devnet-genesis/keystore/teku-keys
+
   genesis:
     image: ethpandaops/ethereum-genesis-generator:5.0.6
     volumes:
-      - ./eth-devnet-genesis:/data
+      - eth-devnet-genesis:/data
       - ./values.env:/config/values.env
     entrypoint: ""
     command:
@@ -39,8 +45,8 @@ services:
   geth-init:
     image: ethereum/client-go:latest
     volumes:
-      - ./eth-devnet-genesis:/eth-devnet-genesis
-      - ./geth-data:/data/geth
+      - eth-devnet-genesis:/eth-devnet-genesis
+      - geth-data:/data/geth
     depends_on:
       genesis:
         condition: service_completed_successfully
@@ -56,8 +62,8 @@ services:
     networks:
       - devnet
     volumes:
-      - ./eth-devnet-genesis:/eth-devnet-genesis
-      - ./geth-data:/data/geth
+      - eth-devnet-genesis:/eth-devnet-genesis
+      - geth-data:/data/geth
     depends_on:
       geth-init:
         condition: service_completed_successfully
@@ -99,8 +105,8 @@ services:
     networks:
       - devnet
     volumes:
-      - ./eth-devnet-genesis:/eth-devnet-genesis
-      - ./teku-data:/data/teku/teku-beacon-data
+      - eth-devnet-genesis:/eth-devnet-genesis
+      - teku-data:/data/teku/teku-beacon-data
     command: >
       --logging=DEBUG
       --log-destination=CONSOLE
