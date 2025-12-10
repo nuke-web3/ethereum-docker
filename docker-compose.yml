@@ -29,7 +29,7 @@ services:
         chmod 0777 -R /eth-devnet-genesis/keystore/teku-keys
 
   genesis:
-    image: ethpandaops/ethereum-genesis-generator:5.0.6
+    image: ethpandaops/ethereum-genesis-generator:5.2.2
     volumes:
       - eth-devnet-genesis:/data
       - ./values.env:/config/values.env
