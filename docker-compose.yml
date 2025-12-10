@@ -95,6 +95,8 @@ services:
       --port=30303
       --verbosity=3
 
+  # Without this, teku fails to write files correctly.
+  # This hack bypasses ownership considerations.
   teku-ownership-patch:
     image: alpine:3
     volumes:
