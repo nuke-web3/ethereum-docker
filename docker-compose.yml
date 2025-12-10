@@ -95,9 +95,20 @@ services:
       --port=30303
       --verbosity=3
 
+  teku-ownership-patch:
+    image: alpine:3
+    volumes:
+      - teku-data:/data/teku/teku-beacon-data
+    entrypoint: ""
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /data/teku/teku-beacon-data/validator/slashprotection
+        chmod -R 0777 /data/teku/teku-beacon-data
+
   teku:
     image: ethpandaops/teku:master
-    user: 1001:1001
     ports:
       - "4000:4000"
       - "9000:9000/tcp"
@@ -136,4 +147,7 @@ services:
       --validator-keys=/eth-devnet-genesis/keystore/teku-keys:/eth-devnet-genesis/keystore/teku-secrets
       --validators-proposer-default-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
     depends_on:
-      - geth
+      teku-ownership-patch:
+        condition: service_completed_successfully
+      geth:
+        condition: service_started
