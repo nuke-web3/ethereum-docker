@@ -12,7 +12,7 @@ services:
     networks:
       - celestia-net
     volumes:
-      - celestia-shared:/tmp/celestia
+      - celestia-shared:/data/local-celestia
     ports:
       - "9090:9090"   # gRPC
       - "26657:26657" # Tendermint RPC (health)
@@ -27,8 +27,8 @@ services:
       FUND_AMOUNT: "1000000000000utia"
       STAKE_AMOUNT: "5000000000utia"
       FEES: "500utia"
-      CHAIN_ID: "local-celestia"
-      APP_HOME: "/tmp/celestia"
+      CHAIN_ID: "private"
+      APP_HOME: "/data/local-celestia"
     entrypoint: ["/bin/sh", "-lc"]
     command:
       - |
@@ -75,11 +75,19 @@ services:
           --grpc.address 0.0.0.0:9090 \
           --force-no-bbr
     healthcheck:
-      test: ["CMD-SHELL", "celestia-appd status --node tcp://127.0.0.1:26657 >/dev/null 2>&1"]
-      interval: 2s
-      timeout: 2s
+      test:
+        - CMD-SHELL
+        - |
+          STATUS=$$(celestia-appd status 2>/dev/null || true)
+          HEIGHT=$$(printf '%s\n' "$$STATUS" | sed -n 's/.*"latest_block_height":"\([^"]*\)".*/\1/p')
+          if [ "$$HEIGHT" -ge 1 ]; then
+            exit 0
+          fi
+          exit 1
+      interval: 1s
+      timeout: 1s
       retries: 10
-      start_period: 4s
+      start_period: 1s
 
   celestia-bridge:
     image: ghcr.io/celestiaorg/celestia-node:v0.28.4
@@ -90,22 +98,21 @@ services:
     networks:
       - celestia-net
     volumes:
-      - celestia-shared:/tmp/celestia
+      - celestia-shared:/data/local-celestia
     ports:
       - "26658:26658" # Node HTTP RPC
     expose:
       - "2121" # P2P
-    environment:
-      NETWORK: "local-celestia"
     entrypoint: ["/bin/bash", "-lc"]
     command:
       - |
-        NODE_STORE="/tmp/celestia/bridge"
+        NODE_STORE="/data/local-celestia/bridge"
 
         # One-time init (idempotent)
         if [ ! -d "$$NODE_STORE" ] || [ -z "$$(ls -A "$$NODE_STORE" 2>/dev/null)" ]; then
           echo "[init] initializing bridge store at $$NODE_STORE"
           celestia bridge init \
+            --p2p.network private \
             --node.store "$$NODE_STORE" \
             --core.ip celestia-app \
             --core.port 9090
@@ -115,9 +122,9 @@ services:
 
         echo "[start] starting bridge node (p2p.network=private)"
         exec celestia bridge start \
+          --p2p.network private \
           --node.store "$$NODE_STORE" \
           --core.ip celestia-app \
           --core.port 9090 \
-          --p2p.network local-celestia \
           --rpc.addr 0.0.0.0 \
           --rpc.port 26658
