@@ -1,6 +1,6 @@
 networks:
-  devnet:
-    name: op-devnet
+  eth-net:
+    driver: bridge
 
 volumes:
   eth-devnet-genesis:
@@ -10,6 +10,7 @@ volumes:
 services:
   keygen:
     image: protolambda/eth2-val-tools:latest
+    network_mode: "none"
     volumes:
       - eth-devnet-genesis:/eth-devnet-genesis
     entrypoint: ""
@@ -30,6 +31,7 @@ services:
 
   genesis:
     image: ethpandaops/ethereum-genesis-generator:5.2.2
+    network_mode: "none"
     volumes:
       - eth-devnet-genesis:/data
       - ./values.env:/config/values.env
@@ -44,23 +46,35 @@ services:
 
   geth-init:
     image: ethereum/client-go:latest
+    network_mode: "none"
     volumes:
       - eth-devnet-genesis:/eth-devnet-genesis
       - geth-data:/data/geth
     depends_on:
       genesis:
         condition: service_completed_successfully
-    command: >
-      init --datadir /data/geth /eth-devnet-genesis/metadata/genesis.json
+    entrypoint: ""
+    command:
+      - sh
+      - -ec
+      - |
+        # If already initialized, skip.
+        # Geth creates this file when the chaindata DB exists.
+        if [ -d /data/geth/geth/chaindata ] || [ -f /data/geth/geth/LOCK ]; then
+          echo "Geth datadir already initialized; skipping geth init"
+          exit 0
+        fi
+
+        exec geth init --datadir /data/geth /eth-devnet-genesis/metadata/genesis.json
 
   geth:
     image: ethereum/client-go:latest
+    networks:
+      - eth-net
     ports:
       - "8545:8545"
       - "30303:30303"
       - "8551:8551"
-    networks:
-      - devnet
     volumes:
       - eth-devnet-genesis:/eth-devnet-genesis
       - geth-data:/data/geth
@@ -99,6 +113,7 @@ services:
   # This hack bypasses ownership considerations.
   teku-ownership-patch:
     image: alpine:3
+    network_mode: "none"
     volumes:
       - teku-data:/data/teku/teku-beacon-data
     entrypoint: ""
@@ -111,12 +126,12 @@ services:
 
   teku:
     image: ethpandaops/teku:master
+    networks:
+      - eth-net
     ports:
       - "4000:4000"
       - "9000:9000/tcp"
       - "9000:9000/udp"
-    networks:
-      - devnet
     volumes:
       - eth-devnet-genesis:/eth-devnet-genesis
       - teku-data:/data/teku/teku-beacon-data
@@ -126,7 +141,7 @@ services:
       --network=/eth-devnet-genesis/metadata/config.yaml
       --data-path=/data/teku/teku-beacon-data
       --data-storage-mode=ARCHIVE
-      --p2p-enabled=true
+      --p2p-enabled=false
       --p2p-peer-lower-bound=1
       --p2p-advertised-ip=172.18.0.3
       --p2p-discovery-site-local-addresses-enabled=true

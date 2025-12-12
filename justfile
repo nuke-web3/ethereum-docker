@@ -6,75 +6,69 @@ CEL := "docker-compose.celestia.yml"
 _default:
     @just --list
 
-# -----------------------------
-# Ethereum only
-# -----------------------------
-# (Re)Start Ethereum Devnet (consensus and execution nodes)
-up-eth:
-    docker compose -f {{ETH}} -p eth up -d
+# Bring up devnet (create/start containers).
+up part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} up -d
 
-down-eth:
-    docker compose -f {{ETH}} -p eth down
+# Stop containers (keeps containers + networks + volumes).
+stop part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} stop
 
-logs-eth:
-    docker compose -f {{ETH}} -p eth logs -f
+# Start previously-stopped containers (no recreate).
+start part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} start
 
-# Shutdown Ethereum AND remove its volumes
-clean-eth:
-    docker compose -f {{ETH}} -p eth down -v
+# Bring down devnet (removes containers + networks; keeps volumes unless -v).
+down part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} down
 
-# -----------------------------
-# Celestia only
-# -----------------------------
-# (Re)Start Celestia Devnet (validator + bridge node)
-up-cel:
-    docker compose -f {{CEL}} -p cel up -d
+# Follow logs.
+logs part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} logs -f
 
-down-cel:
-    docker compose -f {{CEL}} -p cel down
+# *DESTROY* data and bring down devnet (removes containers + networks + volumes).
+clean part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} down -v
 
-logs-cel:
-    docker compose -f {{CEL}} -p cel logs -f
+# Show containers status.
+ps part="all" proj="devnet":
+    just _docker-compose {{ part }} {{ proj }} ps
 
-# Shutdown Celestia AND remove its volumes
-clean-cel:
-    docker compose -f {{CEL}} -p cel down -v
+# Restart, preserving containers/volumes (stop -> start).
+restart part="all" proj="devnet":
+    just stop {{ part }} {{ proj }}
+    just start {{ part }} {{ proj }}
 
-# -----------------------------
-# Combined stack (Ethereum + Celestia)
-# -----------------------------
-# (Re)Start Full Devnet (Ethereum + Celestia)
-up-all:
-    docker compose -f {{ETH}} -f {{CEL}} -p fullstack up -d
-
-down-all:
-    docker compose -f {{ETH}} -f {{CEL}} -p fullstack down
-
-logs-all:
-    docker compose -f {{ETH}} -f {{CEL}} -p fullstack logs -f
-
-# Shutdown fullstack AND remove ALL volumes
-clean-all:
-    docker compose -f {{ETH}} -f {{CEL}} -p fullstack down -v
-
-# -----------------------------
-# Utility
-# -----------------------------
-# `docker compose `ps` for all devnets
-ps:
-    docker compose -p eth ps || true
-    docker compose -p cel ps || true
-    docker compose -p fullstack ps || true
-
-restart-all:
-    just down-all
-    just up-all
-
-# Destroy existing devnet and start from scratch. 
-genesis:
+# *DESTROY* existing data and startup with new genesis.
+genesis proj="devnet":
     #!/usr/bin/env bash
-    just clean
+    set -euo pipefail
+    just clean all {{ proj }}
     NOW=$(date +%s)
-    echo "Starting new chain with genesis timestamp = NOW (UNIX=$NOW) ..."
     sed -i "s/^export GENESIS_TIMESTAMP=.*/export GENESIS_TIMESTAMP=$NOW/" values.env
-    just up-all
+    just up all {{ proj }}
+
+# Private helper to run compose. part: eth | cel | all // proj: project
+# Private helper to run compose.
+#
+# NOTE: part/proj are POSITIONAL here (recommended).
+_docker-compose part="all" proj="devnet" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    part="{{ part }}"
+    project="{{ proj }}"
+
+    case "$part" in
+      eth) files=(-f "{{ ETH }}") ;;
+      cel) files=(-f "{{ CEL }}") ;;
+      all) files=(-f "{{ ETH }}" -f "{{ CEL }}") ;;
+      *)
+        echo "unknown part: $part (use eth|cel|all)" >&2
+        exit 2
+        ;;
+    esac
+
+    # Forward variadic args the shell way (keeps tokens split correctly).
+    set -- {{ args }}
+    exec docker compose "${files[@]}" -p "$project" "$@"
