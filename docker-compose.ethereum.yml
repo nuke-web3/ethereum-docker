@@ -72,9 +72,8 @@ services:
     networks:
       - eth-net
     ports:
-      - "8545:8545"
-      - "30303:30303"
-      - "8551:8551"
+      - "8545:8545"   # HTTP RPC
+      - "8551:8551"   # Engine API
     volumes:
       - eth-devnet-genesis:/eth-devnet-genesis
       - geth-data:/data/geth
@@ -89,11 +88,6 @@ services:
       --http.vhosts=*
       --http.corsdomain=*
       --http.api=admin,engine,net,eth,web3,debug,txpool
-      --ws
-      --ws.addr=0.0.0.0
-      --ws.port=8546
-      --ws.api=admin,engine,net,eth,web3,debug,txpool
-      --ws.origins=*
       --allow-insecure-unlock
       --authrpc.port=8551
       --authrpc.addr=0.0.0.0
@@ -101,12 +95,10 @@ services:
       --authrpc.jwtsecret=/eth-devnet-genesis/jwt/jwtsecret
       --syncmode=full
       --rpc.allow-unprotected-txs
-      --metrics
-      --metrics.addr=0.0.0.0
-      --metrics.port=9001
+      --nodiscover
+      --maxpeers=0
+      --nat=none
       --miner.gasprice=1
-      --discovery.port=30303
-      --port=30303
       --verbosity=3
 
   # Without this, teku fails to write files correctly.
@@ -129,38 +121,27 @@ services:
     networks:
       - eth-net
     ports:
-      - "4000:4000"
-      - "9000:9000/tcp"
-      - "9000:9000/udp"
+      - "4000:4000"   # Beacon REST API
     volumes:
       - eth-devnet-genesis:/eth-devnet-genesis
       - teku-data:/data/teku/teku-beacon-data
     command: >
-      --logging=DEBUG
+      --logging=INFO
       --log-destination=CONSOLE
       --network=/eth-devnet-genesis/metadata/config.yaml
+      --genesis-state=/eth-devnet-genesis/metadata/genesis.ssz
       --data-path=/data/teku/teku-beacon-data
       --data-storage-mode=ARCHIVE
-      --p2p-enabled=false
-      --p2p-peer-lower-bound=1
-      --p2p-advertised-ip=172.18.0.3
-      --p2p-discovery-site-local-addresses-enabled=true
-      --p2p-port=9000
       --rest-api-enabled=true
       --rest-api-docs-enabled=true
       --rest-api-interface=0.0.0.0
       --rest-api-port=4000
       --rest-api-host-allowlist=*
-      --data-storage-non-canonical-blocks-enabled=true
-      --ee-jwt-secret-file=/eth-devnet-genesis/jwt/jwtsecret
+      --p2p-enabled=false
       --ee-endpoint=http://geth:8551
-      --metrics-enabled
-      --metrics-interface=0.0.0.0
-      --metrics-host-allowlist=*
-      --metrics-categories=BEACON,PROCESS,LIBP2P,JVM,NETWORK,PROCESS
-      --metrics-port=8008
+      --ee-jwt-secret-file=/eth-devnet-genesis/jwt/jwtsecret
+      --metrics-enabled=false
       --ignore-weak-subjectivity-period-enabled=true
-      --genesis-state=/eth-devnet-genesis/metadata/genesis.ssz
       --validator-keys=/eth-devnet-genesis/keystore/teku-keys:/eth-devnet-genesis/keystore/teku-secrets
       --validators-proposer-default-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
     depends_on:

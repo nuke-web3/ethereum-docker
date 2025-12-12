@@ -71,15 +71,18 @@ just down all op-test-1
 ## Ethereum
 
 **Ethereum** runs an execution + consensus setup (Geth + Teku).
-Ethereum genesis artifacts are produced deterministically from [values.env](./values.env).
 
-## What you get
-
-- **Execution + consensus** - Geth exposes JSON-RPC on `8545`, WS on `8546`, Engine API on `8551`, and discovery/peer traffic on `30303`. Teku exposes the Beacon REST API on `4000` and validator/libp2p ports on `9000`.
-- **Deterministic genesis** - Genesis artifacts are produced from `values.env`, which pins the chain ID, fork versions, validator count (64), and timing values.
-  - `just clean-genesis` will set `GENESIS_TIMESTAMP` to now, so the chain starts immediately.
+- **Deterministic genesis** - artifacts are produced from [`values.env`](./values.env).
 - **Validator material** - The `keygen` container generates a 64-validator keystore from the mnemonic embedded in `values.env`. Teku mounts those keys from `eth-devnet-genesis/keystore/teku-keys` and starts proposing/attesting automatically.
 - **Prefunded execution accounts** - The chain ships with prefunded accounts defined externally in [`genesis_constants.star`](https://github.com/ethpandaops/ethereum-package/blob/main/src/prelaunch_data_generator/genesis_constants/genesis_constants.star). Any account listed there can be used immediately for testing without needing faucet funds.
+
+
+Interact with the network using your preferred tools:
+
+- **Execution RPC (HTTP):** `http://localhost:8545`
+- **Engine API:** `http://localhost:8551`  
+  - JWT secret at `eth-devnet-genesis/jwt/jwtsecret`
+- **Beacon REST API:** `http://localhost:4000`
 
 ### Regenerate genesis (DESTROYS existing data)
 
