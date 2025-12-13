@@ -127,4 +127,6 @@ services:
           --core.ip celestia-app \
           --core.port 9090 \
           --rpc.addr 0.0.0.0 \
-          --rpc.port 26658
+          --rpc.port 26658 \
+          --log.level.module share/discovery:error \
+          --log.level.module module/p2p:panic
