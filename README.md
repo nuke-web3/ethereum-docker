@@ -1,4 +1,4 @@
-# Celestia Rollup Devnet Suite <\br> _Ethereum + Celestia + Rollups_
+# Celestia Rollup Devnet Suite </br> _Ethereum + Celestia + Rollups_
 
 This repository provisions local devnets using Docker Compose and `just`, with **separate compose files per “part”** (currently **Ethereum** and **Celestia**, with more coming for rollup stacks).
 
