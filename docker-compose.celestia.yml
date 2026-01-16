@@ -126,6 +126,7 @@ services:
           --node.store "$$NODE_STORE" \
           --core.ip celestia-app \
           --core.port 9090 \
+          --rpc.skip-auth \
           --rpc.addr 0.0.0.0 \
           --rpc.port 26658 \
           --log.level.module share/discovery:error \

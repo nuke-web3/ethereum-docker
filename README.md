@@ -18,7 +18,7 @@ You control what runs via `just` by selecting a **part** (`eth`, `cel`, or `all`
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/engine/install/) (Docker Engine 20.10+ required; must include `docker compose`)
-- [just](https://just.systems/)
+- [just](https://just.systems/) (v1.45+)
 
 ## Quickstart
 
