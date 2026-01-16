@@ -1,0 +1,224 @@
+services:
+  # =============================================================
+  # OP-ALT-DA - Celestia DA Server
+  # Posts blobs to Celestia (localestia), serves commitments to op-node/op-batcher
+  # =============================================================
+  op-alt-da:
+    image: ghcr.io/celestiaorg/op-alt-da:v0.10.0
+    restart: unless-stopped
+    depends_on:
+      localestia:
+        condition: service_healthy
+    volumes:
+      - ./config.toml:/config/config.toml:ro
+    command:
+      - --config=/config/config.toml
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  # =============================================================
+  # OP GETH INIT - Initialize genesis (runs once, then exits)
+  # =============================================================
+  op-geth-init:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -f /data/geth/chaindata/CURRENT ] || [ -d /data/geth/chaindata ]; then
+          echo "op-geth already initialized, skipping genesis init"
+        else
+          echo "Initializing op-geth with genesis..."
+          geth init --datadir=/data /config/genesis.json
+        fi
+    volumes:
+      - op-geth-data:/data
+      - ./genesis.json:/config/genesis.json:ro
+
+  # =============================================================
+  # OP GETH - L2 execution layer
+  # =============================================================
+  op-geth:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
+    restart: unless-stopped
+    depends_on:
+      op-geth-init:
+        condition: service_completed_successfully
+    command:
+      - --datadir=/data
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --http.vhosts=*
+      - --http.corsdomain=*
+      - --http.api=web3,debug,eth,txpool,net,engine,miner
+      - --ws
+      - --ws.addr=0.0.0.0
+      - --ws.port=8546
+      - --ws.origins=*
+      - --ws.api=debug,eth,txpool,net,engine,miner
+      - --syncmode=full
+      - --gcmode=archive
+      - --nodiscover
+      - --maxpeers=0
+      - --networkid=${L2_CHAIN_ID}
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=8551
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/config/jwt.txt
+      - --rollup.disabletxpoolgossip=true
+      - --ipcdisable
+      - --metrics
+      - --metrics.port=7299
+    volumes:
+      - op-geth-data:/data
+      - ./jwt.txt:/config/jwt.txt:ro
+    ports:
+      - "8545:8545"   # JSON-RPC
+      - "8546:8546"   # WebSocket
+      - "8551:8551"   # Engine API
+      - "7299:7299"   # Metrics
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8545"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # =============================================================
+  # OP NODE - Derives L2 state from L1, rollup consensus
+  # =============================================================
+  op-node:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.16.3
+    restart: unless-stopped
+    depends_on:
+      op-geth:
+        condition: service_healthy
+      op-alt-da:
+        condition: service_healthy
+    command:
+      - op-node
+      - --l2=http://op-geth:8551
+      - --l2.jwt-secret=/config/jwt.txt
+      - --sequencer.enabled
+      - --sequencer.l1-confs=5
+      - --verifier.l1-confs=4
+      - --rollup.config=/config/rollup.json
+      - --rollup.l1-chain-config=/config/l1-chain-config.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=9545
+      - --rpc.enable-admin
+      - --p2p.disable
+      - --l1=http://anvil:9546
+      - --l1.beacon=http://localhost:5052
+      - --l1.beacon.ignore
+      - --l1.rpckind=${L1_RPC_KIND:-basic}
+      - --l1.trustrpc
+      # Celestia Alt-DA
+      - --altda.enabled=true
+      - --altda.verify-on-read=true
+      - --altda.da-server=http://op-alt-da:3100
+      - --metrics.enabled
+      - --metrics.port=7300
+    volumes:
+      - ./l1-chain-config.json:/config/l1-chain-config.json:ro
+      - ./rollup.json:/config/rollup.json:ro
+      - ./jwt.txt:/config/jwt.txt:ro
+    ports:
+      - "9545:9545"   # op-node RPC
+      - "7300:7300"   # Metrics
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9545"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # =============================================================
+  # OP BATCHER - Submits L2 batches to DA layer
+  # =============================================================
+  op-batcher:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.16.3
+    restart: unless-stopped
+    depends_on:
+      op-geth:
+        condition: service_healthy
+      op-node:
+        condition: service_healthy
+      op-alt-da:
+        condition: service_healthy
+    command:
+      - op-batcher
+      - --l2-eth-rpc=http://op-geth:8545
+      - --rollup-rpc=http://op-node:9545
+      - --poll-interval=1s
+      - --sub-safety-margin=6
+      - --num-confirmations=1
+      - --safe-abort-nonce-too-low-count=3
+      - --resubmission-timeout=30s
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8548
+      - --max-channel-duration=25
+      - --l1-eth-rpc=http://anvil:9546
+      # POPSigner for batcher signing
+      - --signer.endpoint=http://popsigner-lite:8555
+      - --signer.address=${BATCHER_ADDRESS}
+      - --signer.header=X-API-Key:${POPSIGNER_API_KEY}
+      - --signer.tls.enabled=false
+      # Celestia Alt-DA
+      - --altda.da-service=true
+      - --altda.enabled=true
+      - --altda.da-server=http://op-alt-da:3100
+      - --metrics.enabled
+      - --metrics.port=7301
+    ports:
+      - "8548:8548"   # Batcher RPC
+      - "7301:7301"   # Metrics
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8548/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # =============================================================
+  # OP PROPOSER - Submits L2 state roots to L1
+  # =============================================================
+  op-proposer:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
+    restart: unless-stopped
+    depends_on:
+      op-node:
+        condition: service_healthy
+    command:
+      - op-proposer
+      - --poll-interval=12s
+      - --rpc.port=8560
+      - --rollup-rpc=http://op-node:9545
+      - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+      - --proposal-interval=6h
+      - --l1-eth-rpc=http://anvil:9546
+      # POPSigner for proposer signing
+      - --signer.endpoint=http://popsigner-lite:8555
+      - --signer.address=${PROPOSER_ADDRESS}
+      - --signer.header=X-API-Key:${POPSIGNER_API_KEY}
+      - --signer.tls.enabled=false
+      - --metrics.enabled
+      - --metrics.port=7302
+    ports:
+      - "8560:8560"   # Proposer RPC
+      - "7302:7302"   # Metrics
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8560/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  op-geth-data:
+
+networks:
+  default:
+    name: local-opstack-devnet
+    driver: bridge

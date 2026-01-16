@@ -1,0 +1,19 @@
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    volumes:
+      - .:/workspace
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      if [ -f anvil-state.hex ]; then
+        echo "anvil-state.hex already exists, exiting.";
+        exit 0;
+      fi
+
+      echo "Dumping Anvil state to anvil-state.hex ...";
+
+      # Dump state with cast; assumes RPC_URL defaults to http://127.0.0.1:8545
+      cast rpc anvil_dumpState > anvil-state.hex
+      echo "State written to anvil-state.hex"
+
+

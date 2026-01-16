@@ -1,0 +1,34 @@
+networks:
+  anvil-net:
+    driver: bridge
+
+volumes:
+  anvil:
+
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    restart: unless-stopped
+    entrypoint: ["anvil"]
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "9546"
+      - "--state"
+      - "/state/anvil-state.json"
+      - "--chain-id"
+      - "${L1_CHAIN_ID}"
+      - "--gas-limit"
+      - "${GAS_LIMIT}"
+      - "--block-time"
+      - "${BLOCK_TIME}"
+    ports:
+      - "9546:9546"
+    volumes:
+      - anvil:/config/anvil-state.json
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:9546"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
