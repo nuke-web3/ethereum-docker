@@ -1,5 +1,4 @@
 configType = "custom"
-opDeployerVersion = "untagged-3f4294bd-1768325441"
 l1ChainID = 31337
 fundDevAccounts = false
 l1ContractsLocator = "embedded"
@@ -34,6 +33,4 @@ l2ContractsLocator = "embedded"
     batcher = "0x0000000000000000000000000000000000000000"
     proposer = "0x0000000000000000000000000000000000000000"
     challenger = "0x0000000000000000000000000000000000000000"
-  [chains.customGasToken]
-    liquidityControllerOwner = "0x0000000000000000000000000000000000000000"
 

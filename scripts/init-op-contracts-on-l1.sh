@@ -17,40 +17,9 @@ log()  { printf '%s\n' "$*"; }
 die()  { log "[ERROR] $*"; exit 1; }
 step() { log ""; log "==> $*"; }
 
-# -----------------------------------------------------------------------------
-# Validate required env vars (from host .env via env_file / docker --env-file)
-# -----------------------------------------------------------------------------
-need() {
-  var="$1"
-  eval "val=\${$var:-}"
-  [ -n "$val" ] || die "Missing required env var: $var"
-}
-
-need L1_CHAIN_ID
-need L2_CHAIN_ID
-need L2_BLOCK_TIME
-need ALTDA_COMMITMENT_TYPE
-need ALTDA_CHALLENGE_WINDOW
-need ALTDA_RESOLVE_WINDOW
-
-need ADMIN_ADDRESS
-need CHALLENGER_ADDRESS
-need FEE_RECIPIENT_ADDRESS
-need SEQUENCER_ADDRESS
-need BATCHER_ADDRESS
-need PROPOSER_ADDRESS
-
-need DEPLOYER_PRIVATE_KEY
-need L1_RPC_URL
-
-# Hardcoded JWT from env (hex string, preferably 64 hex chars; no 0x)
-need JWT_SECRET
-
 command -v op-deployer >/dev/null 2>&1 || die "op-deployer not found in image"
 
-# -----------------------------------------------------------------------------
 # One-time guard
-# -----------------------------------------------------------------------------
 mkdir -p "$WORKDIR"
 
 if [ -s "${WORKDIR}/state.json" ] || [ -s "${WORKDIR}/intent.toml" ] || \
@@ -61,8 +30,6 @@ fi
 step "Writing jwt.txt from JWT_SECRET env var"
 # Write exactly what you provide; ensure newline at end
 printf '%s\n' "$JWT_SECRET" > "${WORKDIR}/jwt.txt"
-# lock down perms (best effort; may be ignored on some mounts)
-chmod 600 "${WORKDIR}/jwt.txt" 2>/dev/null || true
 
 step "Running op-deployer init"
 op-deployer init \
@@ -117,13 +84,6 @@ l2ContractsLocator = "embedded"
     proposer = "${PROPOSER_ADDRESS}"
     challenger = "${CHALLENGER_ADDRESS}"
 
-  [chains.deployOverrides]
-    l2BlockTime = ${L2_BLOCK_TIME}
-    l2GenesisBlockGasLimit = 60000000
-    systemConfigStartBlock = 0
-    finalizationPeriodSeconds = 12
-    l2GenesisBlockBaseFeePerGas = "0x3B9ACA00"
-
   [chains.dangerousAltDAConfig]
     useAltDA = true
     daCommitmentType = "${ALTDA_COMMITMENT_TYPE}"
@@ -143,8 +103,6 @@ op-deployer apply \
 
 # -----------------------------------------------------------------------------
 # Inspect genesis + rollup
-# NOTE: v0.5.2 sometimes needs the jq workaround you had.
-# Since you requested NO extra installs, we do NOT patch state.json here.
 # If inspect fails, we keep the error output in the target file for debugging.
 # -----------------------------------------------------------------------------
 GENESIS_FILE="${WORKDIR}/${L2_CHAIN_ID}-genesis.json"
@@ -174,6 +132,17 @@ if grep -q "alt_da" "${ROLLUP_FILE}" 2>/dev/null; then
   log "[OK] Alt-DA configuration present in rollup config"
   grep -n "alt_da" -A5 "${ROLLUP_FILE}" | head -n 25 || true
 fi
+
+step "Fixing ownership/permissions on /config for host git usage"
+
+# If these are provided (recommended), use them:
+HOST_UID="${HOST_UID:-1000}"
+HOST_GID="${HOST_GID:-1000}"
+
+# Make files readable and dirs traversable; jwt.txt should be world-readable per your request
+chown -R "${HOST_UID}:${HOST_GID}" /config 2>/dev/null || true
+chmod -R u+rwX,go+rX /config 2>/dev/null || true
+chmod 644 /config/jwt.txt 2>/dev/null || true
 
 step "Done. Files in ${WORKDIR}:"
 ls -la "${WORKDIR}"
