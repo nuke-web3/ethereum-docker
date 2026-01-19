@@ -29,8 +29,8 @@ services:
     ports:
       - "${L1_RPC_PORT}:${L1_RPC_PORT}"
     healthcheck:
-      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:${L1_RPC_PORT}"]
-      interval: 2s
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/${L1_RPC_PORT}'"]
+      interval: 1s
       timeout: 3s
       retries: 10
 
