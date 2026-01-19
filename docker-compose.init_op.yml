@@ -1,19 +1,54 @@
 services:
+  # TODO: run as a hook/script on host?
+  # anvil:
+  #   image: ghcr.io/foundry-rs/foundry:v1.5.1
+  #   volumes:
+  #     - .:/workspace
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command: |
+  #     if [ -f anvil-state.hex ]; then
+  #       echo "anvil-state.hex already exists, exiting.";
+  #       exit 0;
+  #     fi
+
+  #     echo "Dumping Anvil state to anvil-state.hex ...";
+
+  #     # Dump state with cast; assumes RPC_URL defaults to http://127.0.0.1:8545
+  #     cast rpc anvil_dumpState > anvil-state.hex
+  #     echo "State written to anvil-state.hex"
+
+  # op-geth-init:
+  #   image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     - |
+  #       if [ -f /data/geth/chaindata/CURRENT ] || [ -d /data/geth/chaindata ]; then
+  #         echo "op-geth already initialized, skipping genesis init"
+  #       else
+  #         echo "Initializing op-geth with genesis..."
+  #         geth init --datadir=/data /config/genesis.json
+  #       fi
+  #   volumes:
+  #     - op-geth-data:/data
+  #     - ./genesis.json:/config/42069-genesis.json:ro
+
   anvil:
+    # run ephemiral from scratch, no persistance
     image: ghcr.io/foundry-rs/foundry:v1.5.1
+    command: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "900"]
+    ports:
+      - "8545:8545"  
+
+  op-deployer-init:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.5.2
+    depends_on: [anvil]
     volumes:
-      - .:/workspace
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      if [ -f anvil-state.hex ]; then
-        echo "anvil-state.hex already exists, exiting.";
-        exit 0;
-      fi
-
-      echo "Dumping Anvil state to anvil-state.hex ...";
-
-      # Dump state with cast; assumes RPC_URL defaults to http://127.0.0.1:8545
-      cast rpc anvil_dumpState > anvil-state.hex
-      echo "State written to anvil-state.hex"
-
-
+      - ./config:/config
+      - ./scripts:/work/scripts:ro
+    env_file:
+      - .env
+    environment:
+      # only override the ones that must be different *inside docker*
+      L1_RPC_URL: "http://anvil:8545"
+      WORKDIR: "/config"
+    command: ["/work/scripts/init-op-contracts-on-l1.sh"]

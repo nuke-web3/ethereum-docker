@@ -22,24 +22,6 @@ services:
       retries: 60
 
   # =============================================================
-  # OP GETH INIT - Initialize genesis (runs once, then exits)
-  # =============================================================
-  op-geth-init:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        if [ -f /data/geth/chaindata/CURRENT ] || [ -d /data/geth/chaindata ]; then
-          echo "op-geth already initialized, skipping genesis init"
-        else
-          echo "Initializing op-geth with genesis..."
-          geth init --datadir=/data /config/genesis.json
-        fi
-    volumes:
-      - op-geth-data:/data
-      - ./genesis.json:/config/genesis.json:ro
-
-  # =============================================================
   # OP GETH - L2 execution layer
   # =============================================================
   op-geth:
@@ -162,11 +144,6 @@ services:
       - --rpc.port=8548
       - --max-channel-duration=25
       - --l1-eth-rpc=http://anvil:9546
-      # POPSigner for batcher signing
-      - --signer.endpoint=http://popsigner-lite:8555
-      - --signer.address=${BATCHER_ADDRESS}
-      - --signer.header=X-API-Key:${POPSIGNER_API_KEY}
-      - --signer.tls.enabled=false
       # Celestia Alt-DA
       - --altda.da-service=true
       - --altda.enabled=true
@@ -199,11 +176,6 @@ services:
       - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
       - --proposal-interval=6h
       - --l1-eth-rpc=http://anvil:9546
-      # POPSigner for proposer signing
-      - --signer.endpoint=http://popsigner-lite:8555
-      - --signer.address=${PROPOSER_ADDRESS}
-      - --signer.header=X-API-Key:${POPSIGNER_API_KEY}
-      - --signer.tls.enabled=false
       - --metrics.enabled
       - --metrics.port=7302
     ports:

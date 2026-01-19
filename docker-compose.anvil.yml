@@ -18,11 +18,7 @@ services:
       - "--state"
       - "/state/anvil-state.json"
       - "--chain-id"
-      - "${L1_CHAIN_ID}"
-      - "--gas-limit"
-      - "${GAS_LIMIT}"
-      - "--block-time"
-      - "${BLOCK_TIME}"
+      - "${L1_CHAIN_ID:-31337}"
     ports:
       - "9546:9546"
     volumes:
