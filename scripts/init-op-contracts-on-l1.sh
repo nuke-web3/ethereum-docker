@@ -24,7 +24,8 @@ mkdir -p "$WORKDIR"
 
 if [ -s "${WORKDIR}/state.json" ] || [ -s "${WORKDIR}/intent.toml" ] || \
    [ -s "${WORKDIR}/${L2_CHAIN_ID}-genesis.json" ] || [ -s "${WORKDIR}/${L2_CHAIN_ID}-rollup.json" ]; then
-  die "Artifacts already exist in ${WORKDIR}. Refusing to re-run one-time init. (Delete ./config/* to retry.)"
+  log "[SKIP] Artifacts already exist in ${WORKDIR}. (Delete ./config/* to regenerate.)"
+  exit 0
 fi
 
 step "Writing jwt.txt from JWT_SECRET env var"

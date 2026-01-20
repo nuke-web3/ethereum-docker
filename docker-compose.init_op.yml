@@ -1,19 +1,4 @@
 services:
-  # op-geth-init:
-  #   image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
-  #   entrypoint: ["/bin/sh", "-c"]
-  #   command:
-  #     - |
-  #       if [ -f /data/geth/chaindata/CURRENT ] || [ -d /data/geth/chaindata ]; then
-  #         echo "op-geth already initialized, skipping genesis init"
-  #       else
-  #         echo "Initializing op-geth with genesis..."
-  #         geth init --datadir=/data /config/genesis.json
-  #       fi
-  #   volumes:
-  #     - op-geth-data:/data
-  #     - ./genesis.json:/config/42069-genesis.json:ro
-
   anvil:
     image: ghcr.io/foundry-rs/foundry:v1.5.1
     restart: unless-stopped
@@ -48,3 +33,38 @@ services:
       L1_RPC_URL: "http://anvil:${L1_RPC_PORT}"
       WORKDIR: "/config"
     command: ["/work/scripts/init-op-contracts-on-l1.sh"]
+
+  op-geth-init:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
+    restart: "no"
+    depends_on:
+      op-deployer-init:
+        condition: service_completed_successfully
+    env_file: [.env]
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        set -euo pipefail
+
+        : "$${L2_CHAIN_ID:?missing L2_CHAIN_ID}"
+        GENESIS="/config/$${L2_CHAIN_ID}-genesis.json"
+
+        if [ ! -f "$${GENESIS}" ]; then
+          echo "[ERROR] missing genesis: $${GENESIS}"
+          exit 1
+        fi
+
+        if [ -f /data/geth/chaindata/CURRENT ]; then
+          echo "[SKIP] (already initialized) chain=$${L2_CHAIN_ID}"
+          exit 0
+        fi
+
+        geth init --datadir=/data "$${GENESIS}" >/dev/null
+        echo "[DONE] init chain=$${L2_CHAIN_ID}"
+    volumes:
+      - op-geth-data:/data
+      - ./config:/config:ro
+
+volumes:
+  op-geth-data:
+    name: op-geth-data

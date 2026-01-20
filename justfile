@@ -6,6 +6,17 @@ CEL := "docker-compose.celestia.yml"
 _default:
     @just --list
 
+# Startup from absolute zero - required for timestame of genesis not to cause shit
+pheonix:
+    just destroy
+    docker compose -f docker-compose.init_op.yml up -d 
+    docker compose -f docker-compose.optimism.yml up -d 
+
+destroy:
+    docker compose -f docker-compose.optimism.yml down -v
+    docker compose -f docker-compose.init_op.yml down -v
+    rm -f config/*
+
 # Bring up devnet (create/start containers).
 up part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} up -d

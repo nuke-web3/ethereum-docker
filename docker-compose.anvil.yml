@@ -9,19 +9,27 @@ services:
   anvil:
     image: ghcr.io/foundry-rs/foundry:v1.5.1
     restart: unless-stopped
-    entrypoint: ["/work/scripts/anvil-entrypoint.sh"]
     env_file:
       - .env
     environment:
-      # where snapshot lives on host
       STATE_PATH: "/config/anvil-state.json"
     volumes:
       - ./config:/config
       - ./scripts:/work/scripts:ro
     ports:
       - "${L1_RPC_PORT}:${L1_RPC_PORT}"
+    entrypoint: 
+      - anvil
+      - --host
+      - 0.0.0.0
+      - --port
+      - "${L1_RPC_PORT}"
+      - --block-time
+      - "1"
+      - --load-state
+      - "/config/anvil-state.json"
     healthcheck:
-      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:${L1_RPC_PORT}"]
-      interval: 2s
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/${L1_RPC_PORT}'"]
+      interval: 1s
       timeout: 3s
       retries: 10
