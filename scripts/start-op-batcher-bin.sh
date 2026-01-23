@@ -9,6 +9,7 @@ source ${SCRIPT_DIR}/../.env
 ROLLUP_FILE="${SCRIPT_DIR}/../config/${L2_CHAIN_ID}-rollup.json"
 OP_BATCHER_BIN="${SCRIPT_DIR}/../../op/optimism/op-batcher/bin/op-batcher"
 
+set -x  # Prints the FULL expanded command automatically
 "${OP_BATCHER_BIN}" \
   --l1-eth-rpc "http://localhost:${L1_RPC_PORT}" \
   --l2-eth-rpc "http://localhost:${OP_GETH_HTTP_PORT}" \
@@ -20,3 +21,4 @@ OP_BATCHER_BIN="${SCRIPT_DIR}/../../op/optimism/op-batcher/bin/op-batcher"
   --log.level "${LOG_LEVEL}" \
   --max-channel-duration 1 \
   --sub-safety-margin 4
+set +x

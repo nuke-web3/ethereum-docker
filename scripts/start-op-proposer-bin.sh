@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../.env"
 
 ROLLUP_FILE="${SCRIPT_DIR}/../config/${L2_CHAIN_ID}-rollup.json"
@@ -18,6 +17,7 @@ if [[ -z "${DGF_ADDRESS}" || "${DGF_ADDRESS}" == "null" ]]; then
   exit 1
 fi
 
+set -x  # Prints the FULL expanded command automatically
 exec "${OP_PROPOSER_BIN}" \
   --l1-eth-rpc "http://localhost:${L1_RPC_PORT}" \
   --rollup-rpc "http://localhost:${OP_NODE_RPC_PORT}" \
@@ -30,3 +30,4 @@ exec "${OP_PROPOSER_BIN}" \
   --log.level "${LOG_LEVEL}" \
   --poll-interval "12s" \
   --allow-non-finalized
+set +x

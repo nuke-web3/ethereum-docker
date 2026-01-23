@@ -35,6 +35,7 @@ if [[ ! -f "${L1_CHAIN_CONFIG}" ]]; then
 EOF
 fi
 
+set -x  # Prints the FULL expanded command automatically
 "${OP_NODE_BIN}" \
   --l1 "http://localhost:${L1_RPC_PORT}" \
   --l2 "http://localhost:${OP_GETH_AUTH_PORT}" \
@@ -53,3 +54,4 @@ fi
   --l1.trustrpc \
   --log.level "${LOG_LEVEL}" \
   --p2p.sequencer.key "${SEQUENCER_PRIVATE_KEY}"
+set +x

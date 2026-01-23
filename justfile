@@ -19,8 +19,6 @@ init proj="devnet":
 
     NOW=$(date +%s)
     sed -i "s/^export GENESIS_TIMESTAMP=.*/export GENESIS_TIMESTAMP=$NOW/" values.env
-    # TODO: auto update the inbox address for the indexer, it's hardcoded and wrong for starting devnets from scratch
-
     just _docker-compose init_op {{ proj }} up --remove-orphans -d
     just _docker-compose init_op {{ proj }} wait op-geth-init
     # Remove init containers + networks (but NOT volumes; no -v)
@@ -32,7 +30,7 @@ init proj="devnet":
 genesis proj="devnet":
     #!/usr/bin/env bash
     set -euo pipefail
-    just clean {{ proj }}
+    just clean all {{ proj }}
     just init {{ proj }}
     just _docker-compose all {{ proj }} up --remove-orphans -d
     just up all {{ proj }}
@@ -60,6 +58,8 @@ logs part="all" proj="devnet":
 # *DESTROY* data and bring down devnet (removes containers + networks + volumes).
 clean part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} down -v
+    # also need to clean up init, as it defines exported volumes! (geth data)
+    just _docker-compose init_op {{ proj }} down -v
     rm -f config/*
 
 # Show containers status.
