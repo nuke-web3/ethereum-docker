@@ -68,3 +68,6 @@ services:
 volumes:
   op-geth-data:
     name: op-geth-data
+
+networks:
+  default: {}
