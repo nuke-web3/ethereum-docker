@@ -38,6 +38,7 @@ fi
 set -x  # Prints the FULL expanded command automatically
 "${OP_NODE_BIN}" \
   --l1 "http://localhost:${L1_RPC_PORT}" \
+  --l1.beacon "http://localhost:${L1_BEACON_RPC_PORT}" \
   --l2 "http://localhost:${OP_GETH_AUTH_PORT}" \
   --l2.jwt-secret "${SCRIPT_DIR}/../config/jwt.txt" \
   --rollup.config "${ROLLUP_FILE}" \

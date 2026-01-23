@@ -23,7 +23,7 @@ exec "${OP_PROPOSER_BIN}" \
   --rollup-rpc "http://localhost:${OP_NODE_RPC_PORT}" \
   --game-factory-address "${DGF_ADDRESS}" \
   --game-type 1 \
-  --proposal-interval "10s" \
+  --proposal-interval "3s" \
   --private-key "${PROPOSER_PRIVATE_KEY}" \
   --rpc.addr "0.0.0.0" \
   --rpc.port "${OP_PROPOSER_RPC_PORT}" \

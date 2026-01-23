@@ -11,6 +11,7 @@ OP_BATCHER_BIN="${SCRIPT_DIR}/../../op/optimism/op-batcher/bin/op-batcher"
 
 set -x  # Prints the FULL expanded command automatically
 "${OP_BATCHER_BIN}" \
+  --data-availability-type "${OP_BATCHER_DATA_AVAILABILITY_TYPE}" \
   --l1-eth-rpc "http://localhost:${L1_RPC_PORT}" \
   --l2-eth-rpc "http://localhost:${OP_GETH_HTTP_PORT}" \
   --rollup-rpc "http://localhost:${OP_NODE_RPC_PORT}" \
@@ -19,6 +20,6 @@ set -x  # Prints the FULL expanded command automatically
   --rpc.port "${OP_BATCHER_RPC_PORT}" \
   --rpc.enable-admin \
   --log.level "${LOG_LEVEL}" \
-  --max-channel-duration 1 \
+  --max-channel-duration "${OP_BATCHER_MAX_CHANNEL_DURATION}" \
   --sub-safety-margin 4
 set +x
