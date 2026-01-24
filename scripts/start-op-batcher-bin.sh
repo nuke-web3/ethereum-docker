@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source ${SCRIPT_DIR}/../.env
+source "${SCRIPT_DIR}/../.env"
+
 ROLLUP_FILE="${SCRIPT_DIR}/../config/${L2_CHAIN_ID}-rollup.json"
 OP_BATCHER_BIN="${SCRIPT_DIR}/../../op/optimism/op-batcher/bin/op-batcher"
 
@@ -21,5 +20,14 @@ set -x  # Prints the FULL expanded command automatically
   --rpc.enable-admin \
   --log.level "${LOG_LEVEL}" \
   --max-channel-duration "${OP_BATCHER_MAX_CHANNEL_DURATION}" \
-  --sub-safety-margin 4
+  --sub-safety-margin 4 \
+  \
+  --da.rpc "http://localhost:${CELESTIA_NODE_RPC_PORT}" \
+  --da.tls-enabled=false \
+  --da.namespace "${CELESTIA_NAMESPACE}" \
+  --da.tx-client.key-name "devkey" \
+  --da.tx-client.keyring-path "/home/nuke/.celestia-devnet" \
+  --da.tx-client.core-grpc.addr "localhost:${CELESTIA_CORE_GRPC_PORT}" \
+  --da.tx-client.core-grpc.tls-enabled=false \
+  --da.tx-client.p2p-network "${CELESTIA_NETWORK}"
 set +x

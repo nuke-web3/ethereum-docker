@@ -54,5 +54,14 @@ set -x  # Prints the FULL expanded command automatically
   --l1.beacon.ignore \
   --l1.trustrpc \
   --log.level "${LOG_LEVEL}" \
-  --p2p.sequencer.key "${SEQUENCER_PRIVATE_KEY}"
+  --p2p.sequencer.key "${SEQUENCER_PRIVATE_KEY}" \
+  \
+  --da.rpc "http://localhost:${CELESTIA_NODE_RPC_PORT}" \
+  --da.tls-enabled=false \
+  --da.namespace "${CELESTIA_NAMESPACE}" \
+  --da.tx-client.key-name "devkey" \
+  --da.tx-client.keyring-path "/home/nuke/.celestia-devnet" \
+  --da.tx-client.core-grpc.addr "localhost:${CELESTIA_CORE_GRPC_PORT}" \
+  --da.tx-client.core-grpc.tls-enabled=false \
+  --da.tx-client.p2p-network "${CELESTIA_NETWORK}"
 set +x
