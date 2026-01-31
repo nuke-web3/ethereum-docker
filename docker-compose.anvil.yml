@@ -4,6 +4,7 @@ networks:
 
 volumes:
   anvil:
+  common-config:
 
 services:
   anvil:
@@ -14,11 +15,11 @@ services:
     environment:
       STATE_PATH: "/config/anvil-state.json"
     volumes:
-      - ./config:/config
+      - common-config:/config:ro
       - ./scripts:/work/scripts:ro
     ports:
       - "${L1_RPC_PORT}:${L1_RPC_PORT}"
-    entrypoint: 
+    entrypoint:
       - anvil
       - --host
       - 0.0.0.0

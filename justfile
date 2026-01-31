@@ -3,8 +3,8 @@ set quiet := true
 # full consensus & execution layer mocked
 # ETH := "docker-compose.ethereum.yml"
 # anvil (exposes a few becon blob enpoints)
-
 ETH := "docker-compose.anvil.yml"
+
 CEL := "docker-compose.celestia.yml"
 OP := "docker-compose.optimism.yml"
 INIT_OP := "docker-compose.init_op.yml"
@@ -60,11 +60,19 @@ clean part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} down -v
     # also need to clean up init, as it defines exported volumes! (geth data)
     just _docker-compose init_op {{ proj }} down -v
-    rm -f config/*
 
 # Show containers status.
 ps part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} ps
+
+# View dir containing docker volume data
+view-volume proj="devnet" vol="common-config":
+    #!/usr/bin/env bash
+    VOLUME="devnet_{{vol}}"
+    MOUNTPOINT=$(docker volume inspect "$VOLUME" | sed -n 's/.*"Mountpoint": "\([^"]*\)".*/\1/p')
+    
+    echo "Volume: $VOLUME"
+    echo "Mountpoint: $MOUNTPOINT"
 
 # Restart, preserving containers/volumes (stop -> start).
 restart part="all" proj="devnet":
@@ -72,8 +80,6 @@ restart part="all" proj="devnet":
     just start {{ part }} {{ proj }}
 
 # Private helper to run compose. part: eth | cel | all // proj: project
-#
-
 # NOTE: part/proj are POSITIONAL here.
 _docker-compose part="all" proj="devnet" *args:
     #!/usr/bin/env bash

@@ -1,3 +1,7 @@
+volumes:
+  op-geth-data:
+  common-config:
+
 services:
   anvil:
     image: ghcr.io/foundry-rs/foundry:v1.5.1
@@ -6,10 +10,9 @@ services:
     env_file:
       - .env
     environment:
-      # where snapshot lives on host
       STATE_PATH: "/config/anvil-state.json"
     volumes:
-      - ./config:/config
+      - common-config:/config
       - ./scripts:/work/scripts:ro
     ports:
       - "${L1_RPC_PORT}:${L1_RPC_PORT}"
@@ -25,7 +28,7 @@ services:
       anvil:
         condition: service_healthy
     volumes:
-      - ./config:/config
+      - common-config:/config
       - ./scripts:/work/scripts:ro
     env_file:
       - .env
@@ -63,11 +66,5 @@ services:
         echo "[DONE] init chain=$${L2_CHAIN_ID}"
     volumes:
       - op-geth-data:/data
-      - ./config:/config:ro
+      - common-config:/config:ro
 
-volumes:
-  op-geth-data:
-    name: op-geth-data
-
-networks:
-  default: {}

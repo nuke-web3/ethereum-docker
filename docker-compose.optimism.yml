@@ -1,11 +1,10 @@
+networks:
+  op-net:
+    driver: bridge
+
 volumes:
   op-geth-data:
-    external: true
-    name: op-geth-data
-
-networks:
-  default:
-    driver: bridge
+  common-config:
 
 services:
   # =============================================================
@@ -16,7 +15,7 @@ services:
   #   image: ghcr.io/celestiaorg/op-alt-da:v0.10.0
   #   restart: unless-stopped
   #   volumes:
-  #     - ./config.toml:/config/config.toml:ro
+  #     - common-config:/config:ro
   #   ports:
   #     - "3100:3100"
   #   command:
@@ -35,7 +34,7 @@ services:
     restart: unless-stopped
     volumes:
       - op-geth-data:/data
-      - ./config/jwt.txt:/config/jwt.txt:ro
+      - common-config:/config:ro
     ports:
       - "${OP_GETH_HTTP_PORT}:${OP_GETH_HTTP_PORT}"   # JSON-RPC
       - "${OP_GETH_WS_PORT}:${OP_GETH_WS_PORT}"       # WebSocket
@@ -82,9 +81,7 @@ services:
   #     # op-alt-da:
   #     #   condition: service_healthy
   #   volumes:
-  #     - ./l1-chain-config.json:/config/l1-chain-config.json:ro
-  #     - ./rollup.json:/config/rollup.json:ro
-  #     - ./jwt.txt:/config/jwt.txt:ro
+  #     - common-config:/config:ro
   #   ports:
   #     - "9545:9545"   # op-node RPC
   #     - "7300:7300"   # Metrics
