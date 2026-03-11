@@ -1,10 +1,39 @@
 set quiet := true
 
-ETH := "docker-compose.ethereum.yml"
+# full consensus & execution layer mocked
+# ETH := "docker-compose.ethereum.yml"
+# anvil (exposes a few becon blob enpoints)
+ETH := "docker-compose.anvil.yml"
+
 CEL := "docker-compose.celestia.yml"
+OP := "docker-compose.optimism.yml"
+INIT_OP := "docker-compose.init_op.yml"
 
 _default:
     @just --list
+
+# One-time setup (OP init): run jobs, then remove init stack containers/networks.
+init proj="devnet":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    NOW=$(date +%s)
+    sed -i "s/^export GENESIS_TIMESTAMP=.*/export GENESIS_TIMESTAMP=$NOW/" values.env
+    just _docker-compose init_op {{ proj }} up --remove-orphans -d
+    just _docker-compose init_op {{ proj }} wait op-geth-init
+    # Remove init containers + networks (but NOT volumes; no -v)
+    just _docker-compose init_op {{ proj }} down
+
+    echo "[SUCCESS] Initialization of OP on local devnet complete!"
+
+# *DESTROY* existing data and startup with new genesis.
+genesis proj="devnet":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just clean all {{ proj }}
+    just init {{ proj }}
+    just _docker-compose all {{ proj }} up --remove-orphans -d
+    just up all {{ proj }}
 
 # Bring up devnet (create/start containers).
 up part="all" proj="devnet":
@@ -18,7 +47,7 @@ stop part="all" proj="devnet":
 start part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} start
 
-# Bring down devnet (removes containers + networks; keeps volumes unless -v).
+# Bring down devnet (removes containers + networks; keeps volumes, see `just clean` to rm).
 down part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} down
 
@@ -29,29 +58,32 @@ logs part="all" proj="devnet":
 # *DESTROY* data and bring down devnet (removes containers + networks + volumes).
 clean part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} down -v
+    # also need to clean up init, as it defines exported volumes! (geth data)
+    just _docker-compose init_op {{ proj }} down -v
+    # TODO: running scripts interposed with compose more robust
+    # presently, we *may* need to cleanup some artifacts 
+    # docker volume rm devnet_op-celestia-indexer-data || true
 
 # Show containers status.
 ps part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} ps
+
+# View dir containing docker volume data
+view-volume proj="devnet" vol="common-config":
+    #!/usr/bin/env bash
+    VOLUME="devnet_{{vol}}"
+    MOUNTPOINT=$(docker volume inspect "$VOLUME" | sed -n 's/.*"Mountpoint": "\([^"]*\)".*/\1/p')
+    
+    echo "Volume: $VOLUME"
+    echo "Mountpoint: $MOUNTPOINT"
 
 # Restart, preserving containers/volumes (stop -> start).
 restart part="all" proj="devnet":
     just stop {{ part }} {{ proj }}
     just start {{ part }} {{ proj }}
 
-# *DESTROY* existing data and startup with new genesis.
-genesis proj="devnet":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    just clean all {{ proj }}
-    NOW=$(date +%s)
-    sed -i "s/^export GENESIS_TIMESTAMP=.*/export GENESIS_TIMESTAMP=$NOW/" values.env
-    just up all {{ proj }}
-
 # Private helper to run compose. part: eth | cel | all // proj: project
-# Private helper to run compose.
-#
-# NOTE: part/proj are POSITIONAL here (recommended).
+# NOTE: part/proj are POSITIONAL here.
 _docker-compose part="all" proj="devnet" *args:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,13 +94,14 @@ _docker-compose part="all" proj="devnet" *args:
     case "$part" in
       eth) files=(-f "{{ ETH }}") ;;
       cel) files=(-f "{{ CEL }}") ;;
-      all) files=(-f "{{ ETH }}" -f "{{ CEL }}") ;;
+      op)  files=(-f "{{ OP }}") ;;
+      init_op)  files=(-f "{{ INIT_OP }}") ;;
+      all) files=(-f "{{ ETH }}" -f "{{ CEL }}" -f "{{ OP }}") ;;
       *)
-        echo "unknown part: $part (use eth|cel|all)" >&2
+        echo "unknown part: $part (use eth|cel|op|all)" >&2
         exit 2
         ;;
     esac
 
-    # Forward variadic args the shell way (keeps tokens split correctly).
     set -- {{ args }}
     exec docker compose "${files[@]}" -p "$project" "$@"

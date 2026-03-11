@@ -1,0 +1,255 @@
+networks:
+  shared: {}
+
+volumes:
+  op-geth-data:
+  common-config:
+  op-da-indexer-data:
+
+services:
+  # =============================================================
+  # OP-DA-INDEXER - Indexes OP DA data from Celestia
+  # =============================================================
+  op-da-indexer:
+    image: ghcr.io/celestiaorg/op-da-indexer:latest
+    restart: unless-stopped
+    networks:
+      - shared
+    depends_on:
+      op-geth:
+        condition: service_healthy
+      op-node:
+        condition: service_healthy
+    environment:
+      L2_CHAIN_ID: ${L2_CHAIN_ID}
+      OP_CELESTIA_RPC_PORT: ${OP_CELESTIA_RPC_PORT}
+      L1_RPC_PORT: ${L1_RPC_PORT}
+      L1_BEACON_RPC_PORT: ${L1_BEACON_RPC_PORT}
+      OP_GETH_HTTP_PORT: ${OP_GETH_HTTP_PORT}
+      OP_NODE_RPC_PORT: ${OP_NODE_RPC_PORT}
+      CELESTIA_NODE_RPC_PORT: ${CELESTIA_NODE_RPC_PORT}
+      CELESTIA_NAMESPACE: ${CELESTIA_NAMESPACE}
+      LOG_LEVEL: ${LOG_LEVEL}
+    volumes:
+      - common-config:/config:ro
+      - op-da-indexer-data:/data
+      - ./scripts/op-da-indexer-entrypoint.sh:/entrypoint.sh:ro
+    ports:
+      - "${OP_CELESTIA_RPC_PORT}:${OP_CELESTIA_RPC_PORT}"
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "--header=Content-Type: application/json",
+          "--post-data={\"jsonrpc\":\"2.0\",\"method\":\"admin_getIndexerStatus\",\"params\":[],\"id\":1}",
+          "http://localhost:${OP_CELESTIA_RPC_PORT}"
+        ]
+      interval: 5s
+      timeout: 1s
+      retries: 10
+
+  # =============================================================
+  # OP-ALT-DA - Celestia DA Server
+  # Posts blobs to Celestia, serves commitments to op-node/op-batcher
+  # =============================================================
+  op-alt-da:
+    image: ghcr.io/celestiaorg/op-alt-da:dev
+    restart: unless-stopped
+    networks:
+      - shared
+    ports:
+      - "${OP_ALT_DA_PORT}:${OP_ALT_DA_PORT}"
+    expose:
+      - "${OP_ALT_DA_METRICS_PORT}"
+    volumes:
+      - ${CELESTIA_TX_KEYRING_PATH}:${CELESTIA_TX_KEYRING_PATH}:ro
+    command:
+      - --addr=0.0.0.0
+      - --port=${OP_ALT_DA_PORT}
+      - --metrics.enabled
+      - --metrics.port=${OP_ALT_DA_METRICS_PORT}
+      - --log.level=${LOG_LEVEL}
+      - --celestia.namespace=${CELESTIA_NAMESPACE}
+      - --celestia.server=http://celestia-bridge:${CELESTIA_NODE_RPC_PORT}
+      - --celestia.tls-enabled=false
+      - --celestia.tx-client.core-grpc.addr=celestia-app:${CELESTIA_CORE_GRPC_PORT}
+      - --celestia.tx-client.core-grpc.tls-enabled=false
+      - --celestia.tx-client.keyring-path=${CELESTIA_TX_KEYRING_PATH}
+      - --celestia.tx-client.key-name=${CELESTIA_TX_KEY_NAME}
+      - --celestia.tx-client.p2p-network=${CELESTIA_NETWORK}
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${OP_ALT_DA_PORT}/health > /dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # =============================================================
+  # OP GETH - L2 execution layer
+  # =============================================================
+  op-geth:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101609.2
+    restart: unless-stopped
+    networks:
+      - shared
+    volumes:
+      - op-geth-data:/data
+      - common-config:/config:ro
+    ports:
+      - "${OP_GETH_HTTP_PORT}:${OP_GETH_HTTP_PORT}"   # JSON-RPC
+      - "${OP_GETH_WS_PORT}:${OP_GETH_WS_PORT}"       # WebSocket
+      - "${OP_GETH_AUTH_PORT}:${OP_GETH_AUTH_PORT}"   # Engine API
+    command:
+      - --datadir=/data
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.port=${OP_GETH_HTTP_PORT}
+      - --http.vhosts=*
+      - --http.corsdomain=*
+      - --http.api=web3,debug,eth,txpool,net,engine,miner
+      - --ws
+      - --ws.addr=0.0.0.0
+      - --ws.port=${OP_GETH_WS_PORT}
+      - --ws.origins=*
+      - --ws.api=debug,eth,txpool,net,engine,miner
+      - --syncmode=full
+      - --gcmode=archive
+      - --nodiscover
+      - --maxpeers=0
+      - --networkid=${L2_CHAIN_ID}
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=${OP_GETH_AUTH_PORT}
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/config/jwt.txt
+      - --rollup.disabletxpoolgossip=true
+      - --ipcdisable
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${OP_GETH_HTTP_PORT}"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # =============================================================
+  # OP NODE - Derives L2 state from L1, rollup consensus
+  # =============================================================
+  op-node:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.16.8
+    networks:
+      - shared
+    restart: unless-stopped
+    depends_on:
+      op-geth:
+        condition: service_healthy
+      op-alt-da:
+        condition: service_healthy
+    volumes:
+      - common-config:/config:ro
+    ports:
+      - "${OP_NODE_RPC_PORT}:${OP_NODE_RPC_PORT}"
+      - "7300:7300" # Metrics
+    command:
+      - op-node
+      - --l2=http://op-geth:${OP_GETH_AUTH_PORT}
+      - --l2.jwt-secret=/config/jwt.txt
+      - --sequencer.enabled
+      - --sequencer.l1-confs=5
+      - --verifier.l1-confs=4
+      - --rollup.config=/config/${L2_CHAIN_ID}-rollup.json
+      - --rollup.l1-chain-config=/config/l1-chain-config.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=${OP_NODE_RPC_PORT}
+      - --rpc.enable-admin
+      - --p2p.disable
+      - --l1=http://anvil:${L1_RPC_PORT}
+      - --l1.beacon=http://anvil:${L1_BEACON_RPC_PORT}
+      - --l1.beacon.ignore
+      - --l1.rpckind=${L1_RPC_KIND:-basic}
+      - --l1.trustrpc
+      # Celestia Alt-DA
+      - --altda.enabled=true
+      - --altda.verify-on-read=true
+      - --altda.da-server=http://op-alt-da:${OP_ALT_DA_PORT}
+      - --metrics.enabled
+      - --metrics.port=7300
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${OP_NODE_RPC_PORT}"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # =============================================================
+  # OP BATCHER - Submits L2 batches to DA layer
+  # =============================================================
+  op-batcher:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.16.5
+    networks:
+      - shared
+    restart: unless-stopped
+    depends_on:
+      op-geth:
+        condition: service_healthy
+      op-node:
+        condition: service_healthy
+      op-alt-da:
+        condition: service_healthy
+    ports:
+      - "${OP_BATCHER_RPC_PORT}:${OP_BATCHER_RPC_PORT}"
+      - "7301:7301"   # Metrics
+    command:
+      - op-batcher
+      - --l2-eth-rpc=http://op-geth:${OP_GETH_HTTP_PORT}
+      - --rollup-rpc=http://op-node:${OP_NODE_RPC_PORT}
+      - --poll-interval=1s
+      - --sub-safety-margin=6
+      - --num-confirmations=1
+      - --safe-abort-nonce-too-low-count=3
+      - --resubmission-timeout=30s
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=${OP_BATCHER_RPC_PORT}
+      - --max-channel-duration=25
+      - --l1-eth-rpc=http://anvil:${L1_RPC_PORT}
+      - --private-key=${BATCHER_PRIVATE_KEY}
+      # Celestia Alt-DA
+      - --altda.da-service=true
+      - --altda.enabled=true
+      - --altda.da-server=http://op-alt-da:${OP_ALT_DA_PORT}
+      - --metrics.enabled
+      - --metrics.port=7301
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${OP_BATCHER_RPC_PORT}/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # =============================================================
+  # OP PROPOSER - Submits L2 state roots to L1
+  # =============================================================
+  op-proposer:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.16.1
+    restart: unless-stopped
+    depends_on:
+      op-node:
+        condition: service_healthy
+    networks:
+      - shared
+    environment:
+      L1_RPC_PORT: ${L1_RPC_PORT}
+      OP_NODE_RPC_PORT: ${OP_NODE_RPC_PORT}
+      OP_PROPOSER_RPC_PORT: ${OP_PROPOSER_RPC_PORT}
+      PROPOSER_PRIVATE_KEY: ${PROPOSER_PRIVATE_KEY}
+      LOG_LEVEL: ${LOG_LEVEL}
+    volumes:
+      - common-config:/config:ro
+      - ./scripts/op-proposer-entrypoint.sh:/entrypoint.sh:ro
+    ports:
+      - "${OP_PROPOSER_RPC_PORT}:${OP_PROPOSER_RPC_PORT}"
+      - "7302:7302"
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${OP_PROPOSER_RPC_PORT}/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
