@@ -62,7 +62,7 @@ clean part="all" proj="devnet":
     just _docker-compose init_op {{ proj }} down -v
     # TODO: running scripts interposed with compose more robust
     # presently, we *may* need to cleanup some artifacts 
-    docker volume rm devnet_op-celestia-indexer-data || true
+    # docker volume rm devnet_op-celestia-indexer-data || true
 
 # Show containers status.
 ps part="all" proj="devnet":

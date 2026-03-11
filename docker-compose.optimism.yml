@@ -4,8 +4,40 @@ networks:
 volumes:
   op-geth-data:
   common-config:
+  op-da-indexer-data:
 
 services:
+  # =============================================================
+  # OP-DA-INDEXER - Indexes OP DA data from Celestia
+  # =============================================================
+  op-da-indexer:
+    image: ghcr.io/celestiaorg/op-da-indexer:latest
+    restart: unless-stopped
+    networks:
+      - shared
+    depends_on:
+      op-geth:
+        condition: service_healthy
+      op-node:
+        condition: service_healthy
+    environment:
+      L2_CHAIN_ID: ${L2_CHAIN_ID}
+      OP_CELESTIA_RPC_PORT: ${OP_CELESTIA_RPC_PORT}
+      L1_RPC_PORT: ${L1_RPC_PORT}
+      L1_BEACON_RPC_PORT: ${L1_BEACON_RPC_PORT}
+      OP_GETH_HTTP_PORT: ${OP_GETH_HTTP_PORT}
+      OP_NODE_RPC_PORT: ${OP_NODE_RPC_PORT}
+      CELESTIA_NODE_RPC_PORT: ${CELESTIA_NODE_RPC_PORT}
+      CELESTIA_NAMESPACE: ${CELESTIA_NAMESPACE}
+      LOG_LEVEL: ${LOG_LEVEL}
+    volumes:
+      - common-config:/config:ro
+      - op-da-indexer-data:/data
+      - ./scripts/op-da-indexer-entrypoint.sh:/entrypoint.sh:ro
+    ports:
+      - "${OP_CELESTIA_RPC_PORT}:${OP_CELESTIA_RPC_PORT}"
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+
   # =============================================================
   # OP-ALT-DA - Celestia DA Server
   # Posts blobs to Celestia, serves commitments to op-node/op-batcher
@@ -98,8 +130,8 @@ services:
     depends_on:
       op-geth:
         condition: service_healthy
-      # op-alt-da:
-      #   condition: service_healthy
+      op-alt-da:
+        condition: service_healthy
     volumes:
       - common-config:/config:ro
     ports:
@@ -190,46 +222,19 @@ services:
         condition: service_healthy
     networks:
       - shared
+    environment:
+      L1_RPC_PORT: ${L1_RPC_PORT}
+      OP_NODE_RPC_PORT: ${OP_NODE_RPC_PORT}
+      OP_PROPOSER_RPC_PORT: ${OP_PROPOSER_RPC_PORT}
+      PROPOSER_PRIVATE_KEY: ${PROPOSER_PRIVATE_KEY}
+      LOG_LEVEL: ${LOG_LEVEL}
     volumes:
       - common-config:/config:ro
+      - ./scripts/op-proposer-entrypoint.sh:/entrypoint.sh:ro
     ports:
       - "${OP_PROPOSER_RPC_PORT}:${OP_PROPOSER_RPC_PORT}"
       - "7302:7302"
-    entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      STATE_FILE=/config/state.json
-
-      [ -f "$$STATE_FILE" ] || {
-        echo "missing $$STATE_FILE" >&2
-        exit 1
-      }
-
-      line="$$(grep -m1 -E '"DisputeGameFactoryProxy"[[:space:]]*:[[:space:]]*"?0x[0-9a-fA-F]+"?' "$$STATE_FILE" || true)"
-      [ -n "$$line" ] || {
-        echo "DisputeGameFactoryProxy not found in $$STATE_FILE" >&2
-        exit 1
-      }
-
-      DGF_ADDRESS="$$(printf '%s\n' "$$line" | sed -n -E 's/.*"DisputeGameFactoryProxy"[[:space:]]*:[[:space:]]*"?((0x[0-9a-fA-F]+))"?.*/\1/p')"
-      [ -n "$$DGF_ADDRESS" ] && [ "$$DGF_ADDRESS" != "null" ] || {
-        echo "ERROR: could not extract DisputeGameFactoryProxy from $$STATE_FILE" >&2
-        exit 1
-      }
-
-      exec op-proposer \
-        --l1-eth-rpc="http://anvil:${L1_RPC_PORT}" \
-        --rollup-rpc="http://op-node:${OP_NODE_RPC_PORT}" \
-        --game-factory-address="$$DGF_ADDRESS" \
-        --game-type=1 \
-        --proposal-interval=3s \
-        --private-key="${PROPOSER_PRIVATE_KEY}" \
-        --rpc.addr=0.0.0.0 \
-        --rpc.port="${OP_PROPOSER_RPC_PORT}" \
-        --log.level="${LOG_LEVEL}" \
-        --poll-interval=12s \
-        --metrics.enabled \
-        --metrics.port=7302 \
-        --allow-non-finalized
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${OP_PROPOSER_RPC_PORT}/healthz"]
       interval: 15s
