@@ -1,0 +1,150 @@
+networks:
+  shared: {}
+
+volumes:
+  eth-devnet-genesis:
+  geth-data:
+  teku-data:
+
+services:
+  keygen:
+    image: protolambda/eth2-val-tools:latest
+    network_mode: "none"
+    volumes:
+      - eth-devnet-genesis:/eth-devnet-genesis
+    entrypoint: ""
+    command:
+      - sh
+      - -c
+      - |
+        if [ -d /eth-devnet-genesis/keystore ]; then
+          echo 'Keystore already exists, skipping generation';
+          exit 0;
+        fi &&
+        ./eth2-val-tools keystores \
+          --source-mnemonic 'giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete' \
+          --out-loc /eth-devnet-genesis/keystore \
+          --source-min 0 \
+          --source-max 64 &&
+        chmod 0777 -R /eth-devnet-genesis/keystore/teku-keys
+
+  genesis:
+    image: ethpandaops/ethereum-genesis-generator:5.2.2
+    network_mode: "none"
+    volumes:
+      - eth-devnet-genesis:/data
+      - ./values.env:/config/values.env
+    entrypoint: ""
+    command:
+      - sh
+      - -c
+      - if [ -d /data/metadata ]; then echo 'Metadata already exists, skipping generation'; exit 0; fi && ./entrypoint.sh all
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+
+  geth-init:
+    image: ethereum/client-go:latest
+    network_mode: "none"
+    volumes:
+      - eth-devnet-genesis:/eth-devnet-genesis
+      - geth-data:/data/geth
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    entrypoint: ""
+    command:
+      - sh
+      - -ec
+      - |
+        # If already initialized, skip.
+        # Geth creates this file when the chaindata DB exists.
+        if [ -d /data/geth/geth/chaindata ] || [ -f /data/geth/geth/LOCK ]; then
+          echo "Geth datadir already initialized; skipping geth init"
+          exit 0
+        fi
+
+        exec geth init --datadir /data/geth /eth-devnet-genesis/metadata/genesis.json
+
+  geth:
+    image: ethereum/client-go:latest
+    networks:
+      - shared
+    ports:
+      - "8545:8545"   # HTTP RPC
+      - "8551:8551"   # Engine API
+    volumes:
+      - eth-devnet-genesis:/eth-devnet-genesis
+      - geth-data:/data/geth
+    depends_on:
+      geth-init:
+        condition: service_completed_successfully
+    command: >
+      --datadir=/data/geth
+      --http
+      --http.addr=0.0.0.0
+      --http.port=8545
+      --http.vhosts=*
+      --http.corsdomain=*
+      --http.api=admin,engine,net,eth,web3,debug,txpool
+      --allow-insecure-unlock
+      --authrpc.port=8551
+      --authrpc.addr=0.0.0.0
+      --authrpc.vhosts=*
+      --authrpc.jwtsecret=/eth-devnet-genesis/jwt/jwtsecret
+      --syncmode=full
+      --rpc.allow-unprotected-txs
+      --nodiscover
+      --maxpeers=0
+      --nat=none
+      --miner.gasprice=1
+      --verbosity=3
+
+  # Without this, teku fails to write files correctly.
+  # This hack bypasses ownership considerations.
+  teku-ownership-patch:
+    image: alpine:3
+    network_mode: "none"
+    volumes:
+      - teku-data:/data/teku/teku-beacon-data
+    entrypoint: ""
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /data/teku/teku-beacon-data/validator/slashprotection
+        chmod -R 0777 /data/teku/teku-beacon-data
+
+  teku:
+    image: ethpandaops/teku:master
+    networks:
+      - shared
+    ports:
+      - "4000:4000"   # Beacon REST API
+    volumes:
+      - eth-devnet-genesis:/eth-devnet-genesis
+      - teku-data:/data/teku/teku-beacon-data
+    command: >
+      --logging=INFO
+      --log-destination=CONSOLE
+      --network=/eth-devnet-genesis/metadata/config.yaml
+      --genesis-state=/eth-devnet-genesis/metadata/genesis.ssz
+      --data-path=/data/teku/teku-beacon-data
+      --data-storage-mode=ARCHIVE
+      --rest-api-enabled=true
+      --rest-api-docs-enabled=true
+      --rest-api-interface=0.0.0.0
+      --rest-api-port=4000
+      --rest-api-host-allowlist=*
+      --p2p-enabled=false
+      --ee-endpoint=http://geth:8551
+      --ee-jwt-secret-file=/eth-devnet-genesis/jwt/jwtsecret
+      --metrics-enabled=false
+      --ignore-weak-subjectivity-period-enabled=true
+      --validator-keys=/eth-devnet-genesis/keystore/teku-keys:/eth-devnet-genesis/keystore/teku-secrets
+      --validators-proposer-default-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
+    depends_on:
+      teku-ownership-patch:
+        condition: service_completed_successfully
+      geth:
+        condition: service_started
