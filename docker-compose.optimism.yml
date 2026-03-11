@@ -37,6 +37,19 @@ services:
     ports:
       - "${OP_CELESTIA_RPC_PORT}:${OP_CELESTIA_RPC_PORT}"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "--header=Content-Type: application/json",
+          "--post-data={\"jsonrpc\":\"2.0\",\"method\":\"admin_getIndexerStatus\",\"params\":[],\"id\":1}",
+          "http://localhost:${OP_CELESTIA_RPC_PORT}"
+        ]
+      interval: 5s
+      timeout: 1s
+      retries: 10
 
   # =============================================================
   # OP-ALT-DA - Celestia DA Server
