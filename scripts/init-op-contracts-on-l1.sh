@@ -19,18 +19,53 @@ step() { log ""; log "==> $*"; }
 
 command -v op-deployer >/dev/null 2>&1 || die "op-deployer not found in image"
 
-# One-time guard
 mkdir -p "$WORKDIR"
 
+GENESIS_FILE="${WORKDIR}/${L2_CHAIN_ID}-genesis.json"
+ROLLUP_FILE="${WORKDIR}/${L2_CHAIN_ID}-rollup.json"
+L1_CHAIN_CONFIG="${WORKDIR}/l1-chain-config.json"
+JWT_FILE="${WORKDIR}/jwt.txt"
+
+# One-time guard
 if [ -s "${WORKDIR}/state.json" ] || [ -s "${WORKDIR}/intent.toml" ] || \
-   [ -s "${WORKDIR}/${L2_CHAIN_ID}-genesis.json" ] || [ -s "${WORKDIR}/${L2_CHAIN_ID}-rollup.json" ]; then
+   [ -s "${GENESIS_FILE}" ] || [ -s "${ROLLUP_FILE}" ]; then
   log "[SKIP] Artifacts already exist in ${WORKDIR}. (Delete ./config/* to regenerate.)"
   exit 0
 fi
 
 step "Writing jwt.txt from JWT_SECRET env var"
-# Write exactly what you provide; ensure newline at end
-printf '%s\n' "$JWT_SECRET" > "${WORKDIR}/jwt.txt"
+printf '%s\n' "$JWT_SECRET" > "${JWT_FILE}"
+
+step "Writing l1-chain-config.json"
+cat > "${L1_CHAIN_CONFIG}" <<EOF
+{
+  "chainId": ${L1_CHAIN_ID},
+  "homesteadBlock": 0,
+  "eip150Block": 0,
+  "eip155Block": 0,
+  "eip158Block": 0,
+  "byzantiumBlock": 0,
+  "constantinopleBlock": 0,
+  "petersburgBlock": 0,
+  "istanbulBlock": 0,
+  "muirGlacierBlock": 0,
+  "berlinBlock": 0,
+  "londonBlock": 0,
+  "arrowGlacierBlock": 0,
+  "grayGlacierBlock": 0,
+  "shanghaiTime": 0,
+  "cancunTime": 0,
+  "blobSchedule": {
+    "cancun": {
+      "target": ${L2_BLOB_TARGET},
+      "max": ${L2_BLOB_MAX},
+      "baseFeeUpdateFraction": ${L2_BLOB_FEE_FRACTION}
+    }
+  }
+}
+EOF
+chmod 0644 "${L1_CHAIN_CONFIG}"
+log "[OK] Wrote ${L1_CHAIN_CONFIG}"
 
 step "Running op-deployer init"
 op-deployer init \
@@ -102,19 +137,11 @@ op-deployer apply \
 
 [ -f "${WORKDIR}/state.json" ] || die "state.json not found after apply"
 
-# -----------------------------------------------------------------------------
-# Inspect genesis + rollup
-# If inspect fails, we keep the error output in the target file for debugging.
-# -----------------------------------------------------------------------------
-GENESIS_FILE="${WORKDIR}/${L2_CHAIN_ID}-genesis.json"
-ROLLUP_FILE="${WORKDIR}/${L2_CHAIN_ID}-rollup.json"
-
 step "Generating L2 genesis (inspect genesis)"
 if op-deployer inspect genesis --workdir "${WORKDIR}" "${L2_CHAIN_ID}" > "${GENESIS_FILE}" 2>&1; then
   log "[OK] Wrote ${GENESIS_FILE}"
 else
   log "[ERROR] Failed to generate genesis; error output saved in ${GENESIS_FILE}"
-  # Show tail for quick signal
   tail -n 80 "${GENESIS_FILE}" 2>/dev/null || true
   die "inspect genesis failed (likely requires state.json patching)"
 fi
@@ -128,7 +155,6 @@ else
   die "inspect rollup failed"
 fi
 
-# Verify alt_da present (best effort)
 if grep -q "alt_da" "${ROLLUP_FILE}" 2>/dev/null; then
   log "[OK] Alt-DA configuration present in rollup config"
   grep -n "alt_da" -A5 "${ROLLUP_FILE}" | head -n 25 || true
@@ -136,14 +162,13 @@ fi
 
 step "Fixing ownership/permissions on /config for host git usage"
 
-# If these are provided (recommended), use them:
 HOST_UID="${HOST_UID:-1000}"
 HOST_GID="${HOST_GID:-1000}"
 
-# Make files readable and dirs traversable; jwt.txt should be world-readable per your request
 chown -R "${HOST_UID}:${HOST_GID}" /config 2>/dev/null || true
 chmod -R u+rwX,go+rX /config 2>/dev/null || true
 chmod 644 /config/jwt.txt 2>/dev/null || true
+chmod 644 "${L1_CHAIN_CONFIG}" 2>/dev/null || true
 
 step "Done. Files in ${WORKDIR}:"
 ls -la "${WORKDIR}"

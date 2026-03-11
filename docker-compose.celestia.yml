@@ -1,6 +1,5 @@
 networks:
-  celestia-net:
-    driver: bridge
+  shared: {}
 
 volumes:
   celestia-shared:
@@ -10,7 +9,7 @@ services:
     image: ghcr.io/celestiaorg/celestia-app:v6.4.2
     user: "0:0" # run as root
     networks:
-      - celestia-net
+      - shared
     volumes:
       - celestia-shared:/data/local-celestia
     ports:
@@ -96,7 +95,7 @@ services:
       celestia-app:
         condition: service_healthy
     networks:
-      - celestia-net
+      - shared
     volumes:
       - celestia-shared:/data/local-celestia
     ports:

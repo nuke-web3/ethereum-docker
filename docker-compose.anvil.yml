@@ -1,6 +1,5 @@
 networks:
-  anvil-net:
-    driver: bridge
+  shared: {}
 
 volumes:
   anvil:
@@ -9,6 +8,8 @@ volumes:
 services:
   anvil:
     image: ghcr.io/foundry-rs/foundry:v1.5.1
+    networks:
+      - shared
     restart: unless-stopped
     env_file:
       - .env
