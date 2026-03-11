@@ -38,7 +38,7 @@ services:
     command: ["/work/scripts/init-op-contracts-on-l1.sh"]
 
   op-geth-init:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101609.2
     restart: "no"
     depends_on:
       op-deployer-init:
@@ -67,4 +67,3 @@ services:
     volumes:
       - op-geth-data:/data
       - common-config:/config:ro
-

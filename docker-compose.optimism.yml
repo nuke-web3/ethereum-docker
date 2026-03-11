@@ -11,7 +11,7 @@ services:
   # Posts blobs to Celestia, serves commitments to op-node/op-batcher
   # =============================================================
   op-alt-da:
-    image: ghcr.io/celestiaorg/op-alt-da:0.12.0
+    image: ghcr.io/celestiaorg/op-alt-da:dev
     restart: unless-stopped
     networks:
       - shared
@@ -37,7 +37,7 @@ services:
       - --celestia.tx-client.p2p-network=${CELESTIA_NETWORK}
 
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${OP_ALT_DA_PORT}/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${OP_ALT_DA_PORT}/health > /dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -46,7 +46,7 @@ services:
   # OP GETH - L2 execution layer
   # =============================================================
   op-geth:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.3
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101609.2
     restart: unless-stopped
     networks:
       - shared
@@ -91,7 +91,7 @@ services:
   # OP NODE - Derives L2 state from L1, rollup consensus
   # =============================================================
   op-node:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.16.3
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.16.8
     networks:
       - shared
     restart: unless-stopped
@@ -124,11 +124,11 @@ services:
       - --l1.rpckind=${L1_RPC_KIND:-basic}
       - --l1.trustrpc
       # Celestia Alt-DA
-      # - --altda.enabled=true
-      # - --altda.verify-on-read=true
-      # - --altda.da-server=http://op-alt-da:${OP_ALT_DA_PORT}
-      # - --metrics.enabled
-      # - --metrics.port=7300
+      - --altda.enabled=true
+      - --altda.verify-on-read=true
+      - --altda.da-server=http://op-alt-da:${OP_ALT_DA_PORT}
+      - --metrics.enabled
+      - --metrics.port=7300
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${OP_NODE_RPC_PORT}"]
       interval: 15s
@@ -139,7 +139,7 @@ services:
   # OP BATCHER - Submits L2 batches to DA layer
   # =============================================================
   op-batcher:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.16.3
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.16.5
     networks:
       - shared
     restart: unless-stopped
@@ -148,8 +148,8 @@ services:
         condition: service_healthy
       op-node:
         condition: service_healthy
-      # op-alt-da:
-      #   condition: service_healthy
+      op-alt-da:
+        condition: service_healthy
     ports:
       - "${OP_BATCHER_RPC_PORT}:${OP_BATCHER_RPC_PORT}"
       - "7301:7301"   # Metrics
@@ -166,14 +166,15 @@ services:
       - --rpc.port=${OP_BATCHER_RPC_PORT}
       - --max-channel-duration=25
       - --l1-eth-rpc=http://anvil:${L1_RPC_PORT}
+      - --private-key=${BATCHER_PRIVATE_KEY}
       # Celestia Alt-DA
-      # - --altda.da-service=true
-      # - --altda.enabled=true
-      # - --altda.da-server=http://op-alt-da:3100
-      # - --metrics.enabled
-      # - --metrics.port=7301
+      - --altda.da-service=true
+      - --altda.enabled=true
+      - --altda.da-server=http://op-alt-da:${OP_ALT_DA_PORT}
+      - --metrics.enabled
+      - --metrics.port=7301
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8548/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${OP_BATCHER_RPC_PORT}/healthz"]
       interval: 15s
       timeout: 5s
       retries: 20
@@ -182,7 +183,7 @@ services:
   # OP PROPOSER - Submits L2 state roots to L1
   # =============================================================
   op-proposer:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.16.1
     restart: unless-stopped
     depends_on:
       op-node:
