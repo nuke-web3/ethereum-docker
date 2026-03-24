@@ -5,6 +5,7 @@ volumes:
   op-geth-data:
   common-config:
   op-da-indexer-data:
+  celestia-keyring:
 
 services:
   # =============================================================
@@ -64,29 +65,37 @@ services:
       - "${OP_ALT_DA_PORT}:${OP_ALT_DA_PORT}"
     expose:
       - "${OP_ALT_DA_METRICS_PORT}"
-    volumes:
-      - ${CELESTIA_TX_KEYRING_PATH}:${CELESTIA_TX_KEYRING_PATH}:ro
-    command:
-      - --addr=0.0.0.0
-      - --port=${OP_ALT_DA_PORT}
-      - --metrics.enabled
-      - --metrics.port=${OP_ALT_DA_METRICS_PORT}
-      - --log.level=${LOG_LEVEL}
-      - --celestia.namespace=${CELESTIA_NAMESPACE}
-      - --celestia.server=http://celestia-bridge:${CELESTIA_NODE_RPC_PORT}
-      - --celestia.tls-enabled=false
-      - --celestia.tx-client.core-grpc.addr=celestia-app:${CELESTIA_CORE_GRPC_PORT}
-      - --celestia.tx-client.core-grpc.tls-enabled=false
-      - --celestia.tx-client.keyring-path=${CELESTIA_TX_KEYRING_PATH}
-      - --celestia.tx-client.key-name=${CELESTIA_TX_KEY_NAME}
-      - --celestia.tx-client.p2p-network=${CELESTIA_NETWORK}
+    environment:
+      OP_ALT_DA_PORT: "${OP_ALT_DA_PORT}"
+      OP_ALT_DA_METRICS_PORT: "${OP_ALT_DA_METRICS_PORT}"
+      LOG_LEVEL: "${LOG_LEVEL}"
+      CELESTIA_NAMESPACE: "${CELESTIA_NAMESPACE}"
+      CELESTIA_TX_KEY_NAME: "${CELESTIA_TX_KEY_NAME}"
+      CELESTIA_NETWORK: "${CELESTIA_NETWORK}"
 
+      # Docker-internal Celestia addresses.
+      # These hostnames must match the compose service names.
+      # If you rename those services, update these values here too.
+      CELESTIA_APP_RPC_HOST: "celestia-app"
+      CELESTIA_BRIDGE_RPC_HOST: "celestia-bridge"
+      CELESTIA_CORE_GRPC_HOST: "celestia-app"
+
+      CELESTIA_APP_RPC_PORT: "${CELESTIA_APP_RPC_PORT}"
+      CELESTIA_BRIDGE_RPC_PORT: "${CELESTIA_NODE_RPC_PORT}"
+      CELESTIA_CORE_GRPC_PORT: "${CELESTIA_CORE_GRPC_PORT}"
+
+      CELESTIA_KEYRING_PATH: "/celestia-keyring"
+      OP_ALT_DA_WAIT_ATTEMPTS: "${OP_ALT_DA_WAIT_ATTEMPTS:-120}"
+      OP_ALT_DA_WAIT_SECONDS: "${OP_ALT_DA_WAIT_SECONDS:-2}"
+    volumes:
+      - celestia-keyring:/celestia-keyring
+      - ./scripts/op-alt-da-entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:${OP_ALT_DA_PORT}/health > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${OP_ALT_DA_PORT}/health >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20
-
   # =============================================================
   # OP GETH - L2 execution layer
   # =============================================================
