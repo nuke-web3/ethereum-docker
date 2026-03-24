@@ -8,11 +8,12 @@ ETH := "docker-compose.anvil.yml"
 CEL := "docker-compose.celestia.yml"
 OP := "docker-compose.optimism.yml"
 INIT_OP := "docker-compose.init_op.yml"
+INIT_CEL := "docker-compose.init_celestia.yml"
 
 _default:
     @just --list
 
-# One-time setup (OP init): run jobs, then remove init stack containers/networks.
+# One-time setup: run jobs, then remove init stack containers/networks.
 init proj="devnet":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -21,8 +22,11 @@ init proj="devnet":
     sed -i "s/^export GENESIS_TIMESTAMP=.*/export GENESIS_TIMESTAMP=$NOW/" values.env
     just _docker-compose init_op {{ proj }} up --remove-orphans -d
     just _docker-compose init_op {{ proj }} wait op-geth-init
+    just _docker-compose init_cel {{ proj }} up --remove-orphans -d
+    just _docker-compose init_cel {{ proj }} wait init-celestia-key
     # Remove init containers + networks (but NOT volumes; no -v)
     just _docker-compose init_op {{ proj }} down
+    just _docker-compose init_cel {{ proj }} down
 
     echo "[SUCCESS] Initialization of OP on local devnet complete!"
 
@@ -60,6 +64,7 @@ clean part="all" proj="devnet":
     just _docker-compose {{ part }} {{ proj }} down -v
     # also need to clean up init, as it defines exported volumes! (geth data)
     just _docker-compose init_op {{ proj }} down -v
+    just _docker-compose init_cel {{ proj }} down -v
     # TODO: running scripts interposed with compose more robust
     # presently, we *may* need to cleanup some artifacts 
     # docker volume rm devnet_op-celestia-indexer-data || true
@@ -96,6 +101,7 @@ _docker-compose part="all" proj="devnet" *args:
       cel) files=(-f "{{ CEL }}") ;;
       op)  files=(-f "{{ OP }}") ;;
       init_op)  files=(-f "{{ INIT_OP }}") ;;
+      init_cel)  files=(-f "{{ INIT_CEL }}") ;;
       all) files=(-f "{{ ETH }}" -f "{{ CEL }}" -f "{{ OP }}") ;;
       *)
         echo "unknown part: $part (use eth|cel|op|all)" >&2
